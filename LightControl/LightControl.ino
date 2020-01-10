@@ -1,22 +1,13 @@
-/*
-    This sketch establishes a TCP connection to a "quote of the day" service.
-    It sends a "hello" message, and then prints received data.
-*/
-
+#include<Servo.h>
 #include <ESP8266WiFi.h>
-#include <stdio.h>
-#include <string.h>
-#include <stdint.h>
-#include "LEA_core.h"
-#include "LEA_core.c"
 
 #ifndef STASSID
 #define STASSID "SecurityLab(2.4)"    //  와이파이 이름
 #define STAPSK  "security915"    //  와이파이 비밀번호
 #endif
 
-/*조도센서*/
-int lightPin = A0;
+/*서브모터*/
+Servo myservo;
 
 /*와이파이*/
 const char* ssid     = STASSID;
@@ -25,11 +16,11 @@ const char* password = STAPSK;
 const char* host = "210.125.212.191";    //  공용PC IP
 const uint16_t port = 8888;    //  웹서버 포트
 
-void setup() {
-  Serial.begin(115200);
+int pos = 0;
 
-  /*Light setup*/
-  pinMode(lightPin, INPUT);
+void setup() {
+  /*Moter setup*/
+  myservo.attach(9);
 
   /*WiFi setup*/
   Serial.println();
@@ -52,30 +43,19 @@ void setup() {
 }
 
 void loop() {
-  /*조도 센서*/
-//  int light = analogRead(lightPin);    //  조도 센서 값 받아오기
-//  Serial.println(light);
-  
-  /*와이파이*/
+  control();
+  delay(1000); // execute once every 5 minutes, don't flood remote service
+}
+
+void control() {
+  static int light = 0;
+  int st;
+
   Serial.print("connecting to ");
   Serial.print(host);
   Serial.print(':');
   Serial.println(port);
 
-  /*Lea 암호*/
-  BYTE pbUserKey[16] = { "security" };
-  BYTE pdwRoundKey[384] = { 0x0, };
-  BYTE pbData[16] = { "security" };
-  int i;
-
-  /*암호화*/
-  LEA_Key(pbUserKey, pdwRoundKey);
-  LEA_Enc(pdwRoundKey,pbData);
-  
-  for(i=0;i<16;i++)
-    Serial.print(pbData[i],HEX);
-  Serial.println("");
-  
   // Use WiFiClient class to create TCP connections
   WiFiClient client;
   if (!client.connect(host, port)) {
@@ -84,17 +64,9 @@ void loop() {
     return;
   }
 
-  String url = "/IoT/LightStatusUpdate.jsp?check=";
-  url += pbData[i];
-  url += &light=;
-  
-  if(light<1000) {    //  불이 꺼져 있을 때
-    url += 0;
-  }
-  else {    //  불이 켜져 있을 때
-    url += 1;
-  }
+  String url = "/IoT/LightStatusUpdate.jsp?check=security";
 
+  
   // This will send a string to the server
   Serial.println("sending data to server");
   client.print(String("POST ") + url + " HTTP/1.1\r\n" + "HOST: " + host + "\r\n" + "Connection: close\r\n\r\n");
@@ -126,11 +98,43 @@ void loop() {
     Serial.print(line);
   }
   Serial.print("result: " + result);
+  if(result.equals("open")) {
+    st = 1;
+  } else {
+    st = 0;
+  }
+
+  if(light==st) {
+    
+  } else {
+    light = st;
+    if(st == 0) {    //  불끄기
+      for(pos=20; pos <= 50; pos+=1) {
+        myservo.write(pos);
+        delay(10);
+      }
+      delay(1000);
+      for(pos = 50; pos >= 20; pos -= 1) {
+        myservo.write(pos);
+        delay(10);
+      }
+      delay(3000);
+    } else {    //  불 켜기
+      for(pos=20;pos>=-10;pos-=1) {
+        myservo.write(pos);
+        delay(10);
+      }
+      delay(1000);
+      for(pos=-10;pos<=20;pos+=1) {
+        myservo.write(pos);
+        delay(10);
+      }
+      delay(3000);
+    }
+  }
 
   // Close the connection
   Serial.println();
   Serial.println("closing connection");
   client.stop();
-
-  delay(1000); // execute once every 5 minutes, don't flood remote service
 }
