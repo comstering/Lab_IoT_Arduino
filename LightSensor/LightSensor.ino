@@ -53,8 +53,8 @@ void setup() {
 
 void loop() {
   /*조도 센서*/
-//  int light = analogRead(lightPin);    //  조도 센서 값 받아오기
-//  Serial.println(light);
+  int light = analogRead(lightPin);    //  조도 센서 값 받아오기
+  Serial.println(light);
   
   /*와이파이*/
   Serial.print("connecting to ");
@@ -63,7 +63,7 @@ void loop() {
   Serial.println(port);
 
   /*Lea 암호*/
-  BYTE pbUserKey[16] = { "security" };
+  BYTE pbUserKey[16] = { "security915!@#" };
   BYTE pdwRoundKey[384] = { 0x0, };
   BYTE pbData[16] = { "security" };
   int i;
@@ -71,11 +71,14 @@ void loop() {
   /*암호화*/
   LEA_Key(pbUserKey, pdwRoundKey);
   LEA_Enc(pdwRoundKey,pbData);
-  
-  for(i=0;i<16;i++)
-    Serial.print(pbData[i],HEX);
+
+  char chData[16];
+  Serial.print("enc: ");
+  for(i=0;i<16;i++) {
+    chData[i] = (char)pbData[i];
+    Serial.println(pbData[i], HEX);
+  }
   Serial.println("");
-  
   // Use WiFiClient class to create TCP connections
   WiFiClient client;
   if (!client.connect(host, port)) {
@@ -83,10 +86,11 @@ void loop() {
     delay(5000);
     return;
   }
+  delay(100000);
 
   String url = "/IoT/LightStatusUpdate.jsp?check=";
-  url += pbData[i];
-  url += &light=;
+  url += chData;
+  url += "&light=";
   
   if(light<1000) {    //  불이 꺼져 있을 때
     url += 0;
