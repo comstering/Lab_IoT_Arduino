@@ -72,12 +72,17 @@ void loop() {
   LEA_Key(pbUserKey, pdwRoundKey);
   LEA_Enc(pdwRoundKey,pbData);
 
-  char chData[16];
-  Serial.print("enc: ");
+  String check = "";
+
   for(i=0;i<16;i++) {
-    chData[i] = (char)pbData[i];
-    Serial.println(pbData[i], HEX);
+    /*16진수 문자열로 변환*/
+    char str[3];
+    sprintf(str, "%02x", pbData[i]);
+    check += str;
+    Serial.print(pbData[i], HEX);
   }
+  Serial.println(check);
+  
   Serial.println("");
   // Use WiFiClient class to create TCP connections
   WiFiClient client;
@@ -86,10 +91,9 @@ void loop() {
     delay(5000);
     return;
   }
-  delay(100000);
 
   String url = "/IoT/LightStatusUpdate.jsp?check=";
-  url += chData;
+  url += check;
   url += "&light=";
   
   if(light<1000) {    //  불이 꺼져 있을 때
