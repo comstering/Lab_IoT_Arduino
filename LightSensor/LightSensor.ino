@@ -25,6 +25,9 @@ const char* password = STAPSK;
 const char* host = "210.125.212.191";    //  공용PC IP
 const uint16_t port = 8888;    //  웹서버 포트
 
+/*LEA 암호*/
+BYTE pbUserKey[16] = { "security915!@#" };
+
 void setup() {
   Serial.begin(115200);
 
@@ -32,7 +35,6 @@ void setup() {
   pinMode(lightPin, INPUT);
 
   /*WiFi setup*/
-  Serial.println();
   Serial.println();
   Serial.print("Connecting to ");
   Serial.println(ssid);
@@ -45,9 +47,9 @@ void setup() {
     Serial.print(".");
   }
 
-  Serial.println("");
+  Serial.println();
   Serial.println("WiFi connected");
-  Serial.println("IP address: ");
+  Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
 }
 
@@ -62,28 +64,7 @@ void loop() {
   Serial.print(':');
   Serial.println(port);
 
-  /*Lea 암호*/
-  BYTE pbUserKey[16] = { "security915!@#" };
-  BYTE pdwRoundKey[384] = { 0x0, };
-  BYTE pbData[16] = { "security" };
-  int i;
-
-  /*암호화*/
-  LEA_Key(pbUserKey, pdwRoundKey);
-  LEA_Enc(pdwRoundKey,pbData);
-
-  String check = "";
-
-  for(i=0;i<16;i++) {
-    /*16진수 문자열로 변환*/
-    char str[3];
-    sprintf(str, "%02x", pbData[i]);
-    check += str;
-    Serial.print(pbData[i], HEX);
-  }
-  Serial.println(check);
-  
-  Serial.println("");
+  Serial.println();
   // Use WiFiClient class to create TCP connections
   WiFiClient client;
   if (!client.connect(host, port)) {
@@ -91,18 +72,17 @@ void loop() {
     delay(5000);
     return;
   }
-
-  String url = "/IoT/LightStatusUpdate.jsp?check=";
-  url += check;
-  url += "&light=";
   
-  if(light<1000) {    //  불이 꺼져 있을 때
-    url += 0;
-  }
-  else {    //  불이 켜져 있을 때
-    url += 1;
-  }
+  /*Lea 암호*/
+  BYTE pbData[16] = { "security" };
+  String check = LEA_Encrypto(pbData);
 
+  String url = "/IoT/LightStatusUpdate.jsp?check=";    //  DB 통신할 문장
+  url += check;    //  check 값
+  url += "&light=";
+  url += lightValue(light);    //  on/off 값
+
+  /*URL 연결*/
   // This will send a string to the server
   Serial.println("sending data to server");
   client.print(String("POST ") + url + " HTTP/1.1\r\n" + "HOST: " + host + "\r\n" + "Connection: close\r\n\r\n");
@@ -122,18 +102,13 @@ void loop() {
   Serial.println("receiving from remote server");
   // not testing 'client.connected()' since we do not need to send data here
   int count = 1;
-  String result;
   while (client.available()) {    //  응답 후 결과 값 받아오기
     String line = client.readStringUntil('\r');
 
     count++;
     if(count==11)
-    {
-      result = line;
-    }
-    Serial.print(line);
+      Serial.println("result: " + line);
   }
-  Serial.print("result: " + result);
 
   // Close the connection
   Serial.println();
@@ -141,4 +116,34 @@ void loop() {
   client.stop();
 
   delay(1000); // execute once every 5 minutes, don't flood remote service
+}
+
+/*LEA 암호화*/
+String LEA_Encrypto(BYTE data[16]) {
+  BYTE pdwRoundKey[384] = { 0x0, };
+
+  LEA_Key(pbUserKey, pdwRoundKey);
+  LEA_Enc(pdwRoundKey, data);
+
+  String encData = "";
+  char str[3];
+  for(int i = 0; i < 16; i++) {
+    /*16진수 문자열로 변환*/
+    sprintf(str, "%02x", data[i]);
+    encData += str;
+  }
+  Serial.println(encData);
+  return encData;
+}
+
+/*light on/off 암호화*/
+String lightValue(int light) {
+  if(light<1020) {    //  불이 꺼져 있을 때
+    BYTE value[16] = { "0" };
+    return LEA_Encrypto(value);
+  }
+  else {    //  불이 켜져 있을 때
+    BYTE value[16] = { "1" };
+    return LEA_Encrypto(value);
+  }
 }
