@@ -1,5 +1,10 @@
 #include<Servo.h>
 #include <ESP8266WiFi.h>
+#include <stdio.h>
+#include <string.h>
+#include <stdint.h>
+#include "LEA_core.h"
+#include "LEA_core.c"
 
 #ifndef STASSID
 #define STASSID "SecurityLab(2.4)"    //  와이파이 이름
@@ -8,6 +13,7 @@
 
 /*서브모터*/
 Servo myservo;
+#define Dpin D6
 
 /*와이파이*/
 const char* ssid     = STASSID;
@@ -16,11 +22,16 @@ const char* password = STAPSK;
 const char* host = "210.125.212.191";    //  공용PC IP
 const uint16_t port = 8888;    //  웹서버 포트
 
-int pos = 0;
+/*LEA 암호*/
+BYTE pbUserKey[16] = { "security915!@#" };
+
+/*반복전인 행동 방지*/
+int lightstatic = 0;
 
 void setup() {
+  Serial.begin(115200);
   /*Moter setup*/
-  myservo.attach(9);
+  myservo.attach(Dpin);
 
   /*WiFi setup*/
   Serial.println();
@@ -43,15 +54,7 @@ void setup() {
 }
 
 void loop() {
-  control();
-  delay(1000); // execute once every 5 minutes, don't flood remote service
-}
-
-void control() {
-  static int light = 0;
-  int st;
-
-  Serial.print("connecting to ");
+  Serial.print("connection to ");
   Serial.print(host);
   Serial.print(':');
   Serial.println(port);
@@ -64,9 +67,13 @@ void control() {
     return;
   }
 
-  String url = "/IoT/LightStatusUpdate.jsp?check=security";
+  /*LEA 암호*/
+  BYTE pbData[16] = { "security" };
+  String check = LEA_Encrypto(pbData);
 
-  
+  String url = "/IoT/LightArduinoControl.jsp?check=";    //  DB 통신할 문장
+  url += check;    //  check 값
+
   // This will send a string to the server
   Serial.println("sending data to server");
   client.print(String("POST ") + url + " HTTP/1.1\r\n" + "HOST: " + host + "\r\n" + "Connection: close\r\n\r\n");
@@ -89,52 +96,61 @@ void control() {
   String result;
   while (client.available()) {    //  응답 후 결과 값 받아오기
     String line = client.readStringUntil('\r');
-
+    
     count++;
-    if(count==11)
+    if(count==10)
     {
       result = line;
-    }
-    Serial.print(line);
-  }
-  Serial.print("result: " + result);
-  if(result.equals("open")) {
-    st = 1;
-  } else {
-    st = 0;
-  }
-
-  if(light==st) {
-    
-  } else {
-    light = st;
-    if(st == 0) {    //  불끄기
-      for(pos=20; pos <= 50; pos+=1) {
-        myservo.write(pos);
-        delay(10);
-      }
-      delay(1000);
-      for(pos = 50; pos >= 20; pos -= 1) {
-        myservo.write(pos);
-        delay(10);
-      }
-      delay(3000);
-    } else {    //  불 켜기
-      for(pos=20;pos>=-10;pos-=1) {
-        myservo.write(pos);
-        delay(10);
-      }
-      delay(1000);
-      for(pos=-10;pos<=20;pos+=1) {
-        myservo.write(pos);
-        delay(10);
-      }
-      delay(3000);
+      Serial.println("result: " + result);
+      break;
     }
   }
+  control(result);
 
   // Close the connection
   Serial.println();
   Serial.println("closing connection");
   client.stop();
+  
+  delay(1000); // execute once every 5 minutes, don't flood remote service
+}
+
+void control(String result) {
+  int value;
+  if(result.equals("\non")) {
+    value = 1;
+    if(lightstatic == value)
+      return;
+    myservo.write(60);
+    delay(1000);
+    myservo.write(90);
+  } else if(result.equals("\noff")) {
+    value = 0;
+    if(lightstatic == value)
+      return;
+    myservo.write(135);
+    delay(1000);
+    myservo.write(90);
+  } else {
+    myservo.write(90);
+  }
+  lightstatic = value;
+}
+
+/*LEA 암호화*/
+String LEA_Encrypto(BYTE data[16]) {
+  BYTE pdwRoundKey[384] = { 0x0, };
+
+  LEA_Key(pbUserKey, pdwRoundKey);
+  LEA_Enc(pdwRoundKey, data);
+
+  String encData = "";
+  char str[3];
+  for(int i = 0; i < 16; i++) {
+    /*16진수 문자열로 변환*/
+    sprintf(str, "%02x", data[i]);
+    encData += str;
+  }
+  Serial.println(encData);
+  return encData;
 }

@@ -28,6 +28,9 @@ const uint16_t port = 8888;    //  웹서버 포트
 /*LEA 암호*/
 BYTE pbUserKey[16] = { "security915!@#" };
 
+/*전등 컨트롤 연동*/
+int lightstatic = 0;
+
 void setup() {
   Serial.begin(115200);
 
@@ -80,7 +83,13 @@ void loop() {
   String url = "/IoT/LightStatusUpdate.jsp?check=";    //  DB 통신할 문장
   url += check;    //  check 값
   url += "&light=";
-  url += lightValue(light);    //  on/off 값
+
+  String lv = lightValue(light);
+  if(lv.equals("same")) {
+    delay(1000);
+    return;
+  }
+  url += lv;    //  on/off 값
 
   /*URL 연결*/
   // This will send a string to the server
@@ -138,11 +147,20 @@ String LEA_Encrypto(BYTE data[16]) {
 
 /*light on/off 암호화*/
 String lightValue(int light) {
+  int value;
   if(light<1020) {    //  불이 꺼져 있을 때
+    value = 0;
+    if(lightstatic == value)
+      return "same";
+    lightstatic = 0;
     BYTE value[16] = { "0" };
     return LEA_Encrypto(value);
   }
   else {    //  불이 켜져 있을 때
+    value = 1;
+    if(lightstatic == value)
+      return "same";
+    lightstatic = 1;
     BYTE value[16] = { "1" };
     return LEA_Encrypto(value);
   }
