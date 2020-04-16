@@ -29,6 +29,8 @@ const uint16_t port = 8888;    //  웹서버 포트
 /*LEA 암호*/
 BYTE pbUserKey[16] = { "security915!@#" };
 
+int doorstatic = 0;
+
 void setup() {
   Serial.begin(115200);
 
@@ -92,7 +94,12 @@ void loop() {
   String url = "/IoT/DoorStatusUpdate.jsp?check=";    //  DB 통신할 문장
   url += check;    //  check 값
   url += "&door=";
-  url += doorValue(cm);    //  open/close 값
+  String dv = doorValue(cm);
+  if(dv.equals("same")) {
+    delay(1000);
+    return;
+  }
+  url += dv;    //  open/close 값
 
   /*URL 연결*/
   // This will send a string to the server
@@ -157,10 +164,21 @@ float microsecondsToCentimeters(float microseconds) {
 /*door open/close 암호화*/
 String doorValue(float cm) {
   if(cm < 7) {    //  문이 닫혀 있을 경우
+    int dv = 0;
+    if(doorstatic == dv) {
+      return "same";
+    }
+    doorstatic = 0;
     BYTE value[16] = { "0" };
+    int dc = 0;
     return LEA_Encrypto(value);
   }
   else {    //  문이 열려 있을 경우
+    int dv = 1;
+    if(doorstatic == dv) {
+      return "same";
+    }
+    doorstatic = 1;
     BYTE value[16] = { "1" };
     return LEA_Encrypto(value);
   }

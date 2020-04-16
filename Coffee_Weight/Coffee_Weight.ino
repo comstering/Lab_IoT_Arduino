@@ -1,8 +1,5 @@
-/*
-    This sketch establishes a TCP connection to a "quote of the day" service.
-    It sends a "hello" message, and then prints received data.
-*/
-
+//This library can be obtained here http://librarymanager/All#Avia_HX711
+#include "HX711.h" 
 #include <ESP8266WiFi.h>
 #include <stdio.h>
 #include <string.h>
@@ -15,8 +12,10 @@
 #define STAPSK  "security915"    //  와이파이 비밀번호
 #endif
 
-/*조도센서*/
-int lightPin = A0;
+/*무게 센서*/
+#define LOADCELL_DOUT_PIN D5
+#define LOADCELL_SCK_PIN D6
+float output = 0.0;
 
 /*와이파이*/
 const char* ssid     = STASSID;
@@ -28,16 +27,29 @@ const uint16_t port = 8888;    //  웹서버 포트
 /*LEA 암호*/
 BYTE pbUserKey[16] = { "security915!@#" };
 
-/*전등 컨트롤 연동*/
-int lightstatic = 0;
 
-void setup() {
+HX711 scale;
+ 
+//-7050 worked for my 440lb max scale setup
+float calibration_factor = -20000;
+ 
+void setup() 
+{
   Serial.begin(115200);
 
-  /*Light setup*/
-  pinMode(lightPin, INPUT);
-
-  /*WiFi setup*/
+  /*무게센서 setup*/
+  scale.begin(LOADCELL_DOUT_PIN, LOADCELL_SCK_PIN);
+  scale.set_scale();
+  //Reset the scale to 0
+  scale.tare();
+ 
+  //Get a baseline reading
+  long zero_factor = scale.read_average(); 
+  //This can be used to remove the need to tare the scale. Useful in permanent scale projects.
+  Serial.print("Zero factor: ");
+  Serial.println(zero_factor);
+  
+   /*WiFi setup*/
   Serial.println();
   Serial.print("Connecting to ");
   Serial.println(ssid);
@@ -55,12 +67,24 @@ void setup() {
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
 }
+ 
+void loop() 
+{
+  /*무게 센서*/
+  //Adjust to this calibration factor
+  scale.set_scale(calibration_factor);
 
-void loop() {
-  /*조도 센서*/
-  int light = analogRead(lightPin);    //  조도 센서 값 받아오기
-  Serial.println(light);
+  output = scale.get_units(), 1;
+  Serial.print("Reading: ");
+  Serial.print(output);
   
+  //Change this to kg and re-adjust the calibration factor if you follow SI units like a sane person
+  //기존 예제가 파운드(lbs) 기준이지만 우리는 킬로그램(kg)을 쓸것이므로 'kg'로 바꿉시다.
+  Serial.print(" kg"); 
+  Serial.print(" calibration_factor: ");
+  Serial.print(calibration_factor);
+  Serial.println();
+
   /*와이파이*/
   Serial.print("connecting to ");
   Serial.print(host);
@@ -75,21 +99,17 @@ void loop() {
     delay(5000);
     return;
   }
-  
+
   /*Lea 암호*/
   BYTE pbData[16] = { "security" };
   String check = LEA_Encrypto(pbData);
 
-  String url = "/IoT/LightStatusUpdate.jsp?check=";    //  DB 통신할 문장
+  String url = "/IoT/CoffeeStatusUpdate.jsp?check=";    //  DB 통신할 문장
   url += check;    //  check 값
-  url += "&light=";
+  url += "&coffee=";
 
-  String lv = lightValue(light);
-  if(lv.equals("same")) {
-    delay(1000);
-    return;
-  }
-  url += lv;    //  on/off 값
+  String cv = coffeeValue(output);
+  url += cv;
 
   /*URL 연결*/
   // This will send a string to the server
@@ -125,11 +145,10 @@ void loop() {
   Serial.println();
   Serial.println("closing connection");
   client.stop();
-
-  delay(1000); // execute once every 5 minutes, don't flood remote service
+ 
+  delay(1000);
 }
 
-/*LEA 암호화*/
 String LEA_Encrypto(BYTE data[16]) {
   BYTE pdwRoundKey[384] = { 0x0, };
 
@@ -147,22 +166,11 @@ String LEA_Encrypto(BYTE data[16]) {
   return encData;
 }
 
-/*light on/off 암호화*/
-String lightValue(int light) {
-  int lv;
-  if(light<1020) {    //  불이 꺼져 있을 때
-    lv = 0;
-    if(lightstatic == lv)
-      return "same";
-    lightstatic = 0;
+String coffeeValue(float coffee) {
+  if(coffee <= 0.4) {    //  불이 꺼져 있을 때
     BYTE value[16] = { "0" };
     return LEA_Encrypto(value);
-  }
-  else {    //  불이 켜져 있을 때
-    lv = 1;
-    if(lightstatic == lv)
-      return "same";
-    lightstatic = 1;
+  } else {
     BYTE value[16] = { "1" };
     return LEA_Encrypto(value);
   }
