@@ -163,7 +163,7 @@ float microsecondsToCentimeters(float microseconds) {
 
 /*door open/close 암호화*/
 String doorValue(float cm) {
-  if(cm < 7) {    //  문이 닫혀 있을 경우
+  if(cm < 5.5) {    //  문이 닫혀 있을 경우
     int dv = 0;
     if(doorstatic == dv) {
       return "same";
